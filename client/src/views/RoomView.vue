@@ -16,6 +16,7 @@ import {
   ScanFace,
   Gauge,
   BarChartBig,
+  Loader2,
   PieChart as PieChartBig
 } from 'lucide-vue-next';
 import { onMounted, onUnmounted, ref } from 'vue';
@@ -52,29 +53,29 @@ const isAnalysisOn = ref(false);
 let fps = 5;
 let count = 0;
 let analysisInterval: number | NodeJS.Timeout | undefined;
-const frameData = ref<{ Type: string; Confidence: number; }[]>([]);
+const frameData = ref<{ Type: string; Confidence: number }[]>([]);
 const isPieChart = ref(true);
 
 let emptyData = [
-    { "Type": "CALM", "Confidence": 0 },
-    { "Type": "SAD", "Confidence": 0 },
-    { "Type": "SURPRISED", "Confidence": 0 },
-    { "Type": "CONFUSED", "Confidence": 0 },
-    { "Type": "HAPPY", "Confidence": 0 },
-    { "Type": "ANGRY", "Confidence": 0 },
-    { "Type": "DISGUSTED", "Confidence": 0 },
-    { "Type": "FEAR", "Confidence": 0 }
+  { Type: 'CALM', Confidence: 0 },
+  { Type: 'SAD', Confidence: 0 },
+  { Type: 'SURPRISED', Confidence: 0 },
+  { Type: 'CONFUSED', Confidence: 0 },
+  { Type: 'HAPPY', Confidence: 0 },
+  { Type: 'ANGRY', Confidence: 0 },
+  { Type: 'DISGUSTED', Confidence: 0 },
+  { Type: 'FEAR', Confidence: 0 }
 ];
 
 let newData = [
-    { "Type": "CALM", "Confidence": 0 },
-    { "Type": "SAD", "Confidence": 0 },
-    { "Type": "SURPRISED", "Confidence": 0 },
-    { "Type": "CONFUSED", "Confidence": 0 },
-    { "Type": "HAPPY", "Confidence": 0 },
-    { "Type": "ANGRY", "Confidence": 0 },
-    { "Type": "DISGUSTED", "Confidence": 0 },
-    { "Type": "FEAR", "Confidence": 0 }
+  { Type: 'CALM', Confidence: 0 },
+  { Type: 'SAD', Confidence: 0 },
+  { Type: 'SURPRISED', Confidence: 0 },
+  { Type: 'CONFUSED', Confidence: 0 },
+  { Type: 'HAPPY', Confidence: 0 },
+  { Type: 'ANGRY', Confidence: 0 },
+  { Type: 'DISGUSTED', Confidence: 0 },
+  { Type: 'FEAR', Confidence: 0 }
 ];
 
 interface EmotionData {
@@ -140,23 +141,23 @@ async function captureFrame() {
   // Get image data from the canvas
   const imageData = canvas.toDataURL('image/jpeg');
   // Send image data to Lambda via API Gateway
-  
+
   count += 1;
   try {
     const emotions: EmotionData[] = await sendFrameData(imageData);
 
-    emotions.forEach(emotion => {
-      const index = newData.findIndex(data => data.Type === emotion.Type);
+    emotions.forEach((emotion) => {
+      const index = newData.findIndex((data) => data.Type === emotion.Type);
       if (index !== -1) {
         newData[index].Confidence += parseFloat(emotion.Confidence) / fps;
       }
     });
-    
+
     //console.log(count)
     if (count >= fps) {
-      console.log("sending data")
-      frameData.value = newData
-      count = 0
+      console.log('sending data');
+      frameData.value = newData;
+      count = 0;
       newData = JSON.parse(JSON.stringify(emptyData));
     }
   } catch (error) {
@@ -188,6 +189,8 @@ const summary = ref('');
 const bs = ref<number | null>(null);
 const transcribeOn = ref(false);
 const transcriptionStatus = ref<string[]>([]);
+const summaryLoading = ref(false);
+const bsLoading = ref(false);
 
 // Local audio tracks
 let localMicrophoneTrack: IMicrophoneAudioTrack | null = null;
@@ -337,36 +340,46 @@ async function disconnect() {
 async function summarizeTranscript() {
   try {
     const endpoint = userStore.identity === 'Patient' ? 'prescribe' : 'feedback';
+    summaryLoading.value = true;
+    console.log('getting summary...');
     const response = await axios.post(
       `https://1dhs1a0o4l.execute-api.us-east-1.amazonaws.com/prod/${endpoint}`,
       { transcript: transcriptionStatus.value.join('\n') }
     );
     console.log(response);
     if (response.status !== 200) {
+      summaryLoading.value = false;
       console.error('Error summarizing transcript');
     } else {
       summary.value = response.data;
+      summaryLoading.value = false;
       console.log(summary.value);
     }
   } catch (error) {
+    summaryLoading.value = false;
     console.error('Error calling Lambda function:', error);
   }
 }
 
 async function bullshitMeter() {
   try {
+    console.log('getting bullshit...');
+    bsLoading.value = true;
     const response = await axios.post(
       'https://1dhs1a0o4l.execute-api.us-east-1.amazonaws.com/prod/bullshit',
       { transcript: transcriptionStatus.value.join('\n') }
     );
     console.log(response);
     if (response.status !== 200) {
+      bsLoading.value = false;
       console.error('Error summarizing transcript');
     } else {
+      bsLoading.value = false;
       bs.value = Number(response.data);
       console.log(summary.value);
     }
   } catch (error) {
+    bsLoading.value = false;
     console.error('Error calling Lambda function:', error);
   }
 }
@@ -446,44 +459,27 @@ onUnmounted(async () => {
           </CardContent>
         </Card>
 
-        <!-- <Card>
+        <!-- <Card v-if="transcriptionStatus.length > 0">
           <CardHeader>
             <CardTitle class="text-lg tracking-normal">Transcription</CardTitle>
           </CardHeader>
           <CardContent>
             <p
-              v-if="transcriptionStatus.length > 0"
               v-for="(item, index) in transcriptionStatus"
               :key="index">
               {{ item }}
             </p>
-            <div v-else>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-              <p>Doctor: Hello!</p>
-              <p>Patient: Hey!</p>
-            </div>
           </CardContent>
         </Card> -->
 
-        <Card v-if="bs && userStore.identity === 'Doctor'">
+        <Card v-if="userStore.identity === 'Doctor' && (bs || bsLoading)">
           <CardHeader>
-            <CardTitle class="text-lg tracking-normal">BS Meter</CardTitle>
+            <CardTitle class="text-lg tracking-normal">Clinical Accuracy Meter</CardTitle>
           </CardHeader>
-          <CardContent class="pt-6 pb-0">
+          <CardContent>
             <VueSpeedometer
+              v-if="!bsLoading"
+              class="pt-6 pb-0"
               :maxValue="10"
               :value="bs"
               :segments="10"
@@ -492,28 +488,31 @@ onUnmounted(async () => {
               :endColor="'red'"
               :height="200"
               :width="300" />
+            <Loader2 v-else className="size-4 animate-spin" />
           </CardContent>
         </Card>
 
-        <Card v-if="summary && userStore.identity === 'Patient'">
+        <Card v-if="userStore.identity === 'Patient' && (summary || summaryLoading)">
           <CardHeader>
             <CardTitle class="text-lg tracking-normal">AI Doctor's Note</CardTitle>
           </CardHeader>
           <CardContent>
-            <p v-for="(item, index) in summary.split('\n')" :key="index">
+            <p v-if="!summaryLoading" v-for="(item, index) in summary.split('\n')" :key="index">
               {{ item }}
             </p>
+            <Loader2 v-else className="size-4 animate-spin" />
           </CardContent>
         </Card>
 
-        <Card v-if="summary && userStore.identity === 'Doctor'">
+        <Card v-if="userStore.identity === 'Doctor' && (summary || summaryLoading)">
           <CardHeader>
             <CardTitle class="text-lg tracking-normal">AI Feedback for Doctor</CardTitle>
           </CardHeader>
           <CardContent>
-            <p v-for="(item, index) in summary.split('\n')" :key="index">
+            <p v-if="!summaryLoading" v-for="(item, index) in summary.split('\n')" :key="index">
               {{ item }}
             </p>
+            <Loader2 v-else className="size-4 animate-spin" />
           </CardContent>
         </Card>
       </div>
